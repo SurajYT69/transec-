@@ -1,13 +1,23 @@
-import Database from 'better-sqlite3';
+import { Database as SqlJsDatabase } from 'sql.js';
+export interface StatementCompat {
+    run(...params: any[]): {
+        changes: number;
+        lastInsertRowid: number;
+    };
+    get(...params: any[]): any | undefined;
+}
+export declare class DatabaseCompat {
+    private db;
+    private filePath;
+    constructor(db: SqlJsDatabase, filePath: string);
+    exec(sql: string): void;
+    prepare(sql: string): StatementCompat;
+    private persist;
+}
 /**
- * Initializes the SQLite database, creating the directory and running migrations if needed.
- * @returns The initialized database instance
+ * Initializes the pure JavaScript SQLite database (sql.js / WebAssembly).
+ * Does not require any native C++ node-gyp compilation or prebuild binaries.
  */
-export declare function initializeDatabase(): Database.Database;
-/**
- * Gets the initialized database instance.
- * @throws Error if the database has not been initialized
- * @returns The database instance
- */
-export declare function getDatabase(): Database.Database;
+export declare function initializeDatabase(): Promise<DatabaseCompat>;
+export declare function getDatabase(): DatabaseCompat;
 //# sourceMappingURL=connection.d.ts.map

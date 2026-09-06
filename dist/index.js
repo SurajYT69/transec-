@@ -13,7 +13,7 @@ const logger = (0, logger_1.createLogger)('main');
 async function main() {
     try {
         logger.info('Starting SmartTranslate...');
-        (0, connection_1.initializeDatabase)();
+        await (0, connection_1.initializeDatabase)();
         logger.info('Database initialized');
         const service = new translationService_1.TranslationService();
         logger.info('Translation service initialized');

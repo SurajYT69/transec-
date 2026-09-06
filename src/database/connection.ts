@@ -1,4 +1,4 @@
-import Database from 'better-sqlite3';
+import initSqlJs, { Database as SqlJsDatabase } from 'sql.js';
 import path from 'path';
 import fs from 'fs';
 import { config } from '../config';
@@ -6,14 +6,86 @@ import { createLogger } from '../utils/logger';
 
 const logger = createLogger('database:connection');
 
-let db: Database.Database | null = null;
+// Wrap sql.js in a better-sqlite3 compatible API: prepare(sql).run(...), prepare(sql).get(...)
+export interface StatementCompat {
+  run(...params: any[]): { changes: number; lastInsertRowid: number };
+  get(...params: any[]): any | undefined;
+}
+
+export class DatabaseCompat {
+  private db: SqlJsDatabase;
+  private filePath: string;
+
+  constructor(db: SqlJsDatabase, filePath: string) {
+    this.db = db;
+    this.filePath = filePath;
+  }
+
+  public exec(sql: string): void {
+    this.db.exec(sql);
+    this.persist();
+  }
+
+  public prepare(sql: string): StatementCompat {
+    const db = this.db;
+    const persist = () => this.persist();
+
+    return {
+      run(...params: any[]) {
+        db.run(sql, params);
+        persist();
+        // Get last_insert_rowid and changes
+        let lastId = 0;
+        let changes = 0;
+        try {
+          const resId = db.exec('SELECT last_insert_rowid() AS id');
+          if (resId.length && resId[0].values.length) {
+            lastId = Number(resId[0].values[0][0]);
+          }
+          const resChanges = db.exec('SELECT changes() AS ch');
+          if (resChanges.length && resChanges[0].values.length) {
+            changes = Number(resChanges[0].values[0][0]);
+          }
+        } catch {
+          // ignore
+        }
+        return { changes, lastInsertRowid: lastId };
+      },
+
+      get(...params: any[]) {
+        const stmt = db.prepare(sql);
+        try {
+          stmt.bind(params);
+          if (stmt.step()) {
+            return stmt.getAsObject();
+          }
+          return undefined;
+        } finally {
+          stmt.free();
+        }
+      },
+    };
+  }
+
+  private persist(): void {
+    try {
+      const data = this.db.export();
+      const buffer = Buffer.from(data);
+      fs.writeFileSync(this.filePath, buffer);
+    } catch (err: any) {
+      logger.error({ error: err.message }, 'Failed to persist SQLite database');
+    }
+  }
+}
+
+let dbInstance: DatabaseCompat | null = null;
 
 /**
- * Initializes the SQLite database, creating the directory and running migrations if needed.
- * @returns The initialized database instance
+ * Initializes the pure JavaScript SQLite database (sql.js / WebAssembly).
+ * Does not require any native C++ node-gyp compilation or prebuild binaries.
  */
-export function initializeDatabase(): Database.Database {
-  if (db) return db;
+export async function initializeDatabase(): Promise<DatabaseCompat> {
+  if (dbInstance) return dbInstance;
 
   const dbPath = config.database.path;
   const dbDir = path.dirname(dbPath);
@@ -23,32 +95,34 @@ export function initializeDatabase(): Database.Database {
     logger.info(`Created database directory at ${dbDir}`);
   }
 
-  db = new Database(dbPath);
-  
-  // Use WAL mode for better concurrency
-  db.pragma('journal_mode = WAL');
-  logger.info('Database connected with WAL mode');
+  const SQL = await initSqlJs();
+  let rawDb: SqlJsDatabase;
 
-  runMigrations(db);
+  if (fs.existsSync(dbPath)) {
+    const fileBuffer = fs.readFileSync(dbPath);
+    rawDb = new SQL.Database(fileBuffer);
+  } else {
+    rawDb = new SQL.Database();
+  }
 
-  return db;
+  dbInstance = new DatabaseCompat(rawDb, dbPath);
+  logger.info('Database connected with pure WebAssembly sql.js (zero native compilation)');
+
+  runMigrations(dbInstance);
+
+  return dbInstance;
 }
 
-/**
- * Gets the initialized database instance.
- * @throws Error if the database has not been initialized
- * @returns The database instance
- */
-export function getDatabase(): Database.Database {
-  if (!db) {
+export function getDatabase(): DatabaseCompat {
+  if (!dbInstance) {
     throw new Error('Database not initialized. Call initializeDatabase() first.');
   }
-  return db;
+  return dbInstance;
 }
 
-function runMigrations(database: Database.Database): void {
+function runMigrations(database: DatabaseCompat): void {
   logger.info('Running database migrations...');
-  
+
   database.exec(`
     CREATE TABLE IF NOT EXISTS guild_settings (
       guild_id TEXT PRIMARY KEY,

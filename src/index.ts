@@ -14,7 +14,7 @@ async function main() {
   try {
     logger.info('Starting SmartTranslate...');
     
-    initializeDatabase();
+    await initializeDatabase();
     logger.info('Database initialized');
     
     const service = new TranslationService();

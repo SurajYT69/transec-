@@ -3,45 +3,111 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.DatabaseCompat = void 0;
 exports.initializeDatabase = initializeDatabase;
 exports.getDatabase = getDatabase;
-const better_sqlite3_1 = __importDefault(require("better-sqlite3"));
+const sql_js_1 = __importDefault(require("sql.js"));
 const path_1 = __importDefault(require("path"));
 const fs_1 = __importDefault(require("fs"));
 const config_1 = require("../config");
 const logger_1 = require("../utils/logger");
 const logger = (0, logger_1.createLogger)('database:connection');
-let db = null;
+class DatabaseCompat {
+    db;
+    filePath;
+    constructor(db, filePath) {
+        this.db = db;
+        this.filePath = filePath;
+    }
+    exec(sql) {
+        this.db.exec(sql);
+        this.persist();
+    }
+    prepare(sql) {
+        const db = this.db;
+        const persist = () => this.persist();
+        return {
+            run(...params) {
+                db.run(sql, params);
+                persist();
+                // Get last_insert_rowid and changes
+                let lastId = 0;
+                let changes = 0;
+                try {
+                    const resId = db.exec('SELECT last_insert_rowid() AS id');
+                    if (resId.length && resId[0].values.length) {
+                        lastId = Number(resId[0].values[0][0]);
+                    }
+                    const resChanges = db.exec('SELECT changes() AS ch');
+                    if (resChanges.length && resChanges[0].values.length) {
+                        changes = Number(resChanges[0].values[0][0]);
+                    }
+                }
+                catch {
+                    // ignore
+                }
+                return { changes, lastInsertRowid: lastId };
+            },
+            get(...params) {
+                const stmt = db.prepare(sql);
+                try {
+                    stmt.bind(params);
+                    if (stmt.step()) {
+                        return stmt.getAsObject();
+                    }
+                    return undefined;
+                }
+                finally {
+                    stmt.free();
+                }
+            },
+        };
+    }
+    persist() {
+        try {
+            const data = this.db.export();
+            const buffer = Buffer.from(data);
+            fs_1.default.writeFileSync(this.filePath, buffer);
+        }
+        catch (err) {
+            logger.error({ error: err.message }, 'Failed to persist SQLite database');
+        }
+    }
+}
+exports.DatabaseCompat = DatabaseCompat;
+let dbInstance = null;
 /**
- * Initializes the SQLite database, creating the directory and running migrations if needed.
- * @returns The initialized database instance
+ * Initializes the pure JavaScript SQLite database (sql.js / WebAssembly).
+ * Does not require any native C++ node-gyp compilation or prebuild binaries.
  */
-function initializeDatabase() {
-    if (db)
-        return db;
+async function initializeDatabase() {
+    if (dbInstance)
+        return dbInstance;
     const dbPath = config_1.config.database.path;
     const dbDir = path_1.default.dirname(dbPath);
     if (!fs_1.default.existsSync(dbDir)) {
         fs_1.default.mkdirSync(dbDir, { recursive: true });
         logger.info(`Created database directory at ${dbDir}`);
     }
-    db = new better_sqlite3_1.default(dbPath);
-    // Use WAL mode for better concurrency
-    db.pragma('journal_mode = WAL');
-    logger.info('Database connected with WAL mode');
-    runMigrations(db);
-    return db;
+    const SQL = await (0, sql_js_1.default)();
+    let rawDb;
+    if (fs_1.default.existsSync(dbPath)) {
+        const fileBuffer = fs_1.default.readFileSync(dbPath);
+        rawDb = new SQL.Database(fileBuffer);
+    }
+    else {
+        rawDb = new SQL.Database();
+    }
+    dbInstance = new DatabaseCompat(rawDb, dbPath);
+    logger.info('Database connected with pure WebAssembly sql.js (zero native compilation)');
+    runMigrations(dbInstance);
+    return dbInstance;
 }
-/**
- * Gets the initialized database instance.
- * @throws Error if the database has not been initialized
- * @returns The database instance
- */
 function getDatabase() {
-    if (!db) {
+    if (!dbInstance) {
         throw new Error('Database not initialized. Call initializeDatabase() first.');
     }
-    return db;
+    return dbInstance;
 }
 function runMigrations(database) {
     logger.info('Running database migrations...');
