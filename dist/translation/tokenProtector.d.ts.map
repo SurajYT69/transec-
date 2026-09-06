@@ -1,0 +1,1 @@
+{"version":3,"file":"tokenProtector.d.ts","sourceRoot":"","sources":["../../src/translation/tokenProtector.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,cAAc,EAAE,gBAAgB,EAAE,MAAM,UAAU,CAAC;AAE5D;;;;GAIG;AACH,wBAAgB,eAAe,CAAC,IAAI,EAAE,MAAM,GAAG,gBAAgB,CA0C9D;AAED;;;;;GAKG;AACH,wBAAgB,aAAa,CAAC,cAAc,EAAE,MAAM,EAAE,MAAM,EAAE,cAAc,EAAE,GAAG,MAAM,CAwBtF"}

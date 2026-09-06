@@ -1,0 +1,1 @@
+{"version":3,"file":"reactionRemove.d.ts","sourceRoot":"","sources":["../../../src/bot/events/reactionRemove.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,MAAM,EAAsE,MAAM,YAAY,CAAC;AAExG,OAAO,EAAE,kBAAkB,EAAE,MAAM,mCAAmC,CAAC;AAKvE,wBAAgB,2BAA2B,CAAC,MAAM,EAAE,MAAM,EAAE,OAAO,EAAE,kBAAkB,GAAG,IAAI,CA8C7F"}

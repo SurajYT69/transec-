@@ -1,0 +1,1 @@
+{"version":3,"file":"reactionAdd.d.ts","sourceRoot":"","sources":["../../../src/bot/events/reactionAdd.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,MAAM,EAAsE,MAAM,YAAY,CAAC;AAExG,OAAO,EAAE,kBAAkB,EAAE,MAAM,mCAAmC,CAAC;AAKvE,wBAAgB,wBAAwB,CAAC,MAAM,EAAE,MAAM,EAAE,OAAO,EAAE,kBAAkB,GAAG,IAAI,CAgD1F"}
